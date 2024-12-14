@@ -138,14 +138,166 @@ tb_followup <- read_excel("Data/LAB_AND_DIAGNOSTIC.xlsx",
          "date_case_conference", "actions_not_active_tb", "notes_case_conference")
 
 #MERGE COMPONENTS FROM TB-FREE DATABASE INTO FLATFILE
-mortlocks_flatfile <- list(registration, passport, ltbi_hh, ltbi_tx, tb_followup) %>%
+mortlocks_flatfile_raw <- list(registration, passport, ltbi_hh, ltbi_tx, tb_followup) %>%
   reduce(left_join, by = 'registration_id') %>%
   # filter(date_created > "2024-05-01") %>%
   as_tibble() %>%
   modify_if(is.POSIXt, as_date)
 
 #EXPORT FLATFILE TO EXCEL
-write.xlsx(mortlocks_flatfile, "Mortlocks_NW/mortlocks_flatfile_raw.xlsx")
+write.xlsx(mortlocks_flatfile_raw, "Data/mortlocks_flatfile_raw.xlsx")
+
+##--------------------------------------------------------------------------
+
+#clean flatfile to prepare for analysis
+mortlocks_analysis_data <- read_excel("Data/mortlocks_flatfile.xlsx",
+                                 guess_max = 20000, col_names = TRUE) %>%
+  modify_if(is.POSIXt, as_date) %>%
+  mutate(date_of_birth = case_when(date_of_birth < as_date("1930-01-01") ~ NA,
+                                   .default = date_of_birth)) %>%
+  mutate(age = trunc((date_of_birth %--% date_created) / years(1)),
+         age_group = case_when(age <= 4 ~ "0-4",
+                               age <= 9 & age > 4 ~ "5-9",
+                               age <= 19 & age > 9 ~ "10-19",
+                               age <= 39 & age > 19 ~ "20-39",
+                               age <= 59 & age > 39 ~ "40-59",
+                               age > 59 ~ "60+"),
+         age_group = factor(age_group,
+                            levels=c("0-4","5-9","10-19","20-39","40-59","60+")),
+         
+         tst_result = case_when(tst_result < 0 ~ NA,
+                                .default = tst_result),
+         
+         date_onsite_id = mdy(str_extract(`onsite_id`,"(\\d{6,6})")),
+         date_of_visit_adj = as.Date(date_of_visit1)+2,
+         date_screening = case_when(is.not.na(tst_date_read) ~ tst_date_read,
+                                    is.not.na(date_onsite_id) ~ date_onsite_id,
+                                    is.not.na(weight) ~ date_of_visit_adj),
+         #making counts
+         screened_at_clinic = if_else(is.not.na(tst_date_read) |
+                                        is.not.na(active_tb) |
+                                        is.not.na(result_hd_assessment) |
+                                        is.not.na(weight) |
+                                        is.not.na(date_screening),
+                                      1, 0,
+                                      missing = 0),
+         
+         tst_read = if_else(is.not.na(tst_date_read) | is.not.na(tst_result) | is.not.na(tst_interpretation), 1, 0,
+                            missing = 0),
+         
+         ltbi_diagnosis = if_else( (is.not.na(ltbi_treatment_id)),
+                                   1, 0,
+                                   missing = 0),
+         
+         active_tb_tx = if_else(outcome_case_conference == "Active TB", 1, 0,
+                                missing = 0),
+         
+         ltbi_tx_indicated = if_else(ltbi_diagnosis == 1 &
+                                       (treatment_recommended == "Y" |
+                                          treatment_recommended_later == "Y"),
+                                     1,0,
+                                     missing = 0),
+         
+         ltbi_tx_started = case_when(ltbi_diagnosis == 1 & treatment_started == "Y" ~ 1,
+                                     .default = 0),
+         
+         sputum_sent = if_else(tb_sputum == "Y", 1, 0,
+                               missing = 0),
+         
+         hd_further_assessment = if_else(result_hd_assessment == 2, 1, 0,
+                                         missing = 0),
+         # hd_confirmed = if_else(hd_program_assesment_result == "Leprosy", 1, 0,
+         #                        missing = 0),
+         hd_prev_given = if_else(hd_prevention == "Y", 1, 0,
+                                 missing = 0),
+         
+         dm_a1c_result = if_else(a1c >= 6.5, 1, 0),
+         dm_a1c_or_hx = case_when(dm_a1c_result == 1 ~ 1,
+                                  history_diabetes == "Y" ~ 1,
+                                  .default = 0),
+         new_dm_result = case_when(dm_a1c_result == 1 & history_diabetes != "Y" ~ 1,
+                                   .default = 0),
+         
+         tst_result_10 = case_when(tst_result >= 10 ~ ">= 10 mm TST",
+                                   tst_result < 10 ~ "<10 mm TST"),
+         tst_pos = if_else(tst_result >= 10, 1, 0,
+                           missing = 0),
+         tst_neg = if_else(tst_result < 10 & tst_place_visit == "Y", 1, 0,
+                           missing = 0),
+         
+         tst_read_elapse = interval(date_of_visit1, tst_date_read) |>
+           as.duration() |> as.numeric(units = "days"),
+         tst_read_cat = if_else(tst_read_elapse == 2 | tst_read_elapse == 3,"On time",
+                                if_else(tst_read_elapse > 3,"Late",
+                                        "Invalid")),
+         tst_read_yn =if_else(tst_place_visit == "N", "No TST",
+                              if_else(tst_place_visit == "Y" &
+                                        (is.not.na(tst_interpretation) |
+                                           is.not.na(tst_result)) ,"Read",
+                                      "Not read")),
+         
+         village = str_to_upper(village),
+         village = if_else(grepl("KUCHUWA",village), "KUCHUWA",
+                           if_else(grepl("NANTAKU",village), "NEPUKOS",
+                                   if_else(grepl("FASON", village), "FOSON",
+                                           if_else(grepl("FOSON", village), "FOSON",
+                                                   village)))),
+         
+         weight = as.numeric(weight),
+         height = as.numeric(height),
+         bmi = case_when(age >= 18 ~ round(weight/(height^2)*10000,1),
+                         .default = NA),
+         bmi = case_when(bmi > 100 | bmi < 13.0 ~ NA,
+                         .default = bmi),
+         bmi_cat = case_when(bmi >= 30 & bmi < 100 ~ "obese",
+                             bmi >= 25 & bmi < 30 ~ "overweight",
+                             bmi >= 18.5 & bmi < 25 ~ "normal",
+                             bmi >= 13.0 & bmi < 18.5 ~  "underweight"),
+         bmi_cat = factor(bmi_cat,
+                          levels=c("underweight","normal","overweight","obese")),
+         
+         current_smoker = case_when(smoking_history == "Current" ~ 1,
+                                    .default=0),
+         
+         
+         known_tb_exposure = case_when(tb_disease_exposure == "Y" ~ 1,
+                                       .default=0),
+         prior_tb = case_when(treated_tb_ltbi == "TB" ~ 1,
+                              .default=0),
+         
+         al_one_symptom = case_when(current_tb_symptoms_2weeks == "Y" |
+                                      current_tb_symptoms_any_duration == "Y" |
+                                      current_tb_symptoms_coughing_blood == "Y" |
+                                      current_tb_symptoms_fatigue == "Y" |
+                                      current_tb_symptoms_fever == "Y" |
+                                      current_tb_symptoms_weight_loss	 == "Y" |
+                                      current_tb_symptoms_sweats == "Y" |
+                                      current_tb_symptoms_swollen_lymph	 == "Y" ~ 1,
+                                    .default=0),
+         
+         abnormal_xray = case_when(xray_result_preliminary == "Likely TB" |
+                                     xray_result_preliminary == "Possible TB" ~ 1,
+                                   .default=0)
+  ) %>%
+  # select(-date_of_visit_adj, -date_onsite_id) %>%
+  modify_if(is.POSIXt, as_date) %>%
+  mutate(age_group = case_when(age <= 1 ~ "0-1",
+                               age <= 4 & age > 1 ~ "2-4",
+                               age <= 9 & age > 4 ~ "5-9",
+                               age <= 19 & age > 9 ~ "10-19",
+                               age <= 39 & age > 19 ~ "20-39",
+                               age <= 59 & age > 39 ~ "40-59",
+                               age > 59 ~ "60+"),
+         age_group = factor(age_group, 
+                            levels=c("0-1","2-4","5-9",
+                                     "10-19","20-39","40-59",
+                                     "60+")),
+         
+         tst_result_5 = case_when(tst_result >= 5 ~ ">= 5 mm TST",
+                                  tst_result < 5 ~ "<5 mm TST")
+  )
+
+write.xlsx(mortlocks_analysis_data, "Data/mortlocks_analysis_data.xlsx")
 
 #CLEAN WORKSPACE
 rm(list = ls())
