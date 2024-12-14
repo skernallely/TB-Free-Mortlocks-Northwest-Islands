@@ -22,20 +22,10 @@ setwd("~/PIHOA/TBFC/R Analysis/Mortlocks_NW")
 #PACKAGES
 library(tidyverse) #pipes
 library(readxl) #excel load-in
-library(openxlsx) #excel load-in
-library(lubridate) #dealing with dates
-library(stringr) #dealing with strings
-library(vtable) #allows sumtable
 library(janitor) #allows tabyl & cleaning names
 library(ggplot2) #make graphs
-library(ggpubr) #special aggregate of plots
-library(ggthemes) #makes prettier graphs
-library(gridExtra) #tiled grid of plots
-library(scales) #percent
-library(ggsci) #ggsci color palette
-library(scales) #add percent formatting
-library(patchwork)#add arrangement for forest plot
-library(fmsb)#add risk diff and risk ratios calcs
+library(fmsb) #risk diff and risk ratios calcs
+library(patchwork) #add arrangement for forest plot
 
 #FORMULAS
 `%notin%` <- Negate(`%in%`)
