@@ -4,6 +4,7 @@
 ## Goal: Wrangle data from TB-Free screening database into flatfile for analysis
 ##  Use data from Mortlocks and Northwest Islands only
 
+#------------------------------------------------------------------------------
 #WORKING DIRECTORY
 setwd("~/PIHOA/TBFC/R Analysis/Mortlocks_NW")
 
@@ -15,6 +16,7 @@ library(openxlsx) #excel load-out
 #FORMULAS
 `%notin%` <- Negate(`%in%`)
 is.not.na <- function(x) !is.na(x)
+#------------------------------------------------------------------------------
 
 #DATASETS
 #REGISTRATION SHEET
