@@ -145,7 +145,7 @@ mortlocks_flatfile <- list(registration, passport, ltbi_hh, ltbi_tx, tb_followup
   modify_if(is.POSIXt, as_date)
 
 #EXPORT FLATFILE TO EXCEL
-write.xlsx(mortlocks_flatfile, "Mortlocks_NW/mortlocks_flatfile.xlsx")
+write.xlsx(mortlocks_flatfile, "Mortlocks_NW/mortlocks_flatfile_raw.xlsx")
 
 #CLEAN WORKSPACE
 rm(list = ls())
