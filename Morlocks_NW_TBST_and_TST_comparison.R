@@ -16,6 +16,9 @@
 ##  as they lack comparison group in the TST group
 # --------------------------
 
+#WORKING DIRECTORY
+setwd("~/PIHOA/TBFC/R Analysis/Mortlocks_NW")
+
 #PACKAGES
 library(tidyverse) #pipes
 library(readxl) #excel load-in
@@ -296,4 +299,5 @@ p_left + p_mid + p_right + plot_layout(design = layout)
 ## save final figure
 ggsave("Figures/forest_plot.png", width=12, height=4)
 
-
+#clean the workspace
+rm(list = ls())
