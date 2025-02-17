@@ -542,7 +542,7 @@ p_left + p_mid + p_right + gen_grob(sectiona_table,
                     "TBST: tuberculosis antigen-based skin test; ESS: effective sample size; TST: tuberculin skin test; CI: confidence interval; PR: prevalence ratio",
                     "\n",
                     "*Estimated test positivity, absolute difference, prevalence ratio and respective 95% CIs from g-computation in the matched sample, inclusive of weighting"),
-                  theme = theme(plot.caption = element_text(hjust = 0))
+                  theme = theme(plot.caption = element_text(size=10, hjust = 0))
   )
 
 ## save final figure
