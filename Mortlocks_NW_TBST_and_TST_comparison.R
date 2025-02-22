@@ -374,6 +374,8 @@ pos_rd_table <- tibble(
   ) %>%
   select(type, group, pos_tbst, pos_conf_tbst, pos_tst, pos_conf_tst, rd, rd_conf)
 
+pos_rd_table
+
 # small border style
 border_style = officer::fp_border(color="black", width=.5)
 border_style_thick = officer::fp_border(color="black", width=1)
@@ -408,7 +410,7 @@ sectiona_table <-
     pos_tst = "Test positivity", 
     pos_conf_tst = "95% CI",
     rd = "Estimate", 
-    rd_conf = "95% CI*")  %>% 
+    rd_conf = "95% CI")  %>% 
   
   merge_at(i = 1, j = 3:4, part = "header") %>% # Horizontally merge columns 2 to 4 in new header row
   merge_at(i = 1, j = 5:6, part = "header") %>% # Horizontally merge columns 2 to 4 in new header row
@@ -444,7 +446,6 @@ sectiona_table <-
   hline(part = "body", i = 1, border = border_style) %>%   # at row 1 
   hline(part = "body", i = 5, border = border_style)       # at row 5
   
-    
 sectiona_table
 
 #------{PLOTTING RISK ESTIMATES}----------
