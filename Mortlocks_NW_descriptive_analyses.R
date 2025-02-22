@@ -35,11 +35,81 @@ tbst_only<-mortlocks_flatfile %>%
   filter(age_group != "0-1" & is.not.na(tst_result_10)) %>%
   select(sex,age_group, municipality, tb_disease_exposure, treated_tb_ltbi,
          current_tb_symptoms_none, active_tb, smoking_history,tst_result_10,
-         active_tb_tx, ltbi_diagnosis, age, prior_tb
+         active_tb_tx, ltbi_diagnosis, age, prior_tb, xray_indicated,
+         xray_result_preliminary,is_xpert_testing, lab_and_diagnostic_id
   ) %>%
   mutate(age_group = factor(age_group, 
                             levels=c("2-4","5-9","10-19","20-39","40-59","60+")),)
+
+
+##----Algorithm numbers----
+#number tbst placed, read and not read
+mortlocks_flatfile %>%
+  filter(tst_read_yn != "No TST" & age_group != "0-1") %>%
+  tabyl(tst_read_yn) %>%
+  adorn_totals()
+
+#number positive and negative
+tbst_only %>%
+  tabyl(tst_result_10)
+
+#among negative, how many referred for xray and how many reassuring exam?
+#among all screened, how many referred for xray?
+tbst_only %>%
+  tabyl(tst_result_10,xray_indicated) %>%
+  adorn_totals()
+
+#among all screened, how many actually received xray?
+tbst_only %>%
+  filter(xray_indicated == "Y") %>%
+  group_by(tst_result_10) %>%
+  summarise(done = sum(xray_result_preliminary != "Not done"),
+            not_done  = sum(xray_result_preliminary == "Not done"))
+
+#among all screened, how with/without concerning xray/sent for CC?
+tbst_only %>%
+  filter(xray_indicated == "Y") %>%
+  mutate(sent_for_case_conference = case_when(is.not.na(lab_and_diagnostic_id) ~ "Y",
+                                              .default = "N")) %>%
+  tabyl(sent_for_case_conference) %>%
+  adorn_totals()
+
+#how many sputa collected? 
+#how many diagnosed with tb?
+tbst_only %>%
+  tabyl(is_xpert_testing,active_tb_tx) %>%
+  adorn_totals(c("row","col"))
+
+
+#how many xray but not treated for anything
+tbst_only %>%
+  filter(xray_result_preliminary != "Not done" & xray_indicated == "Y" &
+           is.na(lab_and_diagnostic_id)) %>%
+  summarise(n = n(),
+            pos =  sum(tst_result_10 == ">= 10 mm TST"),
+            neg =  sum(tst_result_10 == "<10 mm TST"),
+            ltbi_diagnosis = sum(tst_result_10 == ">= 10 mm TST" &
+                                   prior_tb != 1),
+            not_retreated = sum(tst_result_10 == ">= 10 mm TST" &
+                                         prior_tb == 1),
+            nada = sum(tst_result_10 == "<10 mm TST")
+  )
+
+#how many ltbi
+tbst_only %>%
+  summarise(ltbi = sum(tst_result_10 == ">= 10 mm TST" & active_tb_tx != 1 &
+                         prior_tb != 1))
+
+#how many positive but no treatment
+tbst_only %>%
+  filter(tst_result_10 == ">= 10 mm TST" & active_tb_tx != 1 &
+           prior_tb == 1) %>%
+   View()
+  summarise(not_retreated = sum(tst_result_10 == ">= 10 mm TST" & active_tb_tx != 1 &
+                         prior_tb == 1))
+
 ##----Demographic tables------
+
 #TABLE 1
 #demographic summary table of people screened with a TBST
 sumtable(tbst_only)
@@ -271,3 +341,32 @@ grouped_sex_pos / gen_grob(sectiona_table_pos,
 ## save final figure
 ggsave("Figures/positivity_by_age_sex_with_sample_sizes.png",
        width = 1280, height = 1280, units = "px", scale = 1.5, dpi=300)
+
+
+
+###---{SITREP}----
+
+mortlocks_flatfile %>%
+  group_by(age_group) %>%
+  summarise(no_registered = n(),
+            no_screened = sum(screened_at_clinic),
+            
+            no_active_tb = sum(active_tb_tx),
+
+            no_ltbi = sum(ltbi_diagnosis),
+
+            no_hd_referrals = sum(hd_further_assessment),
+            no_hd_prevention = sum(hd_prev_given),
+            
+            no_diabetes = sum(dm_a1c_or_hx, na.rm = TRUE),
+            no_new_diabetes = sum(new_dm_result, na.rm = TRUE)
+  ) %>%
+  adorn_totals() %>%
+  select(age_group, no_registered, no_screened,  
+         no_active_tb, no_ltbi, 
+         no_hd_referrals, 
+         no_hd_prevention, 
+         no_diabetes, no_new_diabetes) %>%
+  t() %>%
+  as.data.frame() %>%
+  row_to_names(1)
