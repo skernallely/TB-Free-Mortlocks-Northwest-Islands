@@ -19,6 +19,7 @@ library(gtsummary) #allows summary tabyl and p-value
 library(ggplot2) #make graphs
 library(ggthemes) #makes prettier graphs
 library(patchwork) #add arrangement
+library(scales)
 
 #formulas
 `%notin%` <- Negate(`%in%`)
@@ -219,6 +220,15 @@ make_tbst_pos_graphs <- function(data, fill) {
 }
 
 ##----POSITIVITY GRAPH----
+##totals by age group and sex
+tbst_labels <- tbst_only %>%
+  filter(is.not.na(tst_result_10) & age_group != "0-4" & is.not.na(age_group)) %>%
+  group_by(age_group) %>%
+  summarise(num_tbst = n()) %>%
+  mutate(labels = paste(age_group,paste0("n=",num_tbst),sep="\n")
+  ) %>%
+  mutate(labels = factor(labels, levels = labels))
+
 #tst positivity by age group and sex
 tbst_pos_age_sex <- tbst_only %>%
   filter(is.not.na(tst_result_10) & age_group != "0-4" & is.not.na(age_group)) %>%
@@ -229,23 +239,31 @@ tbst_pos_age_sex <- tbst_only %>%
   ) %>%
   summarise(num_tbst = n(), 
             tbst_pos = sum(tst_result_10 == ">= 10 mm TST"),
-            pct = tbst_pos / num_tbst)
+            pct = tbst_pos / num_tbst) %>%
+  merge(tbst_labels, by="age_group")
 
 ##make graph by sex grouped
 grouped_sex_pos <-
   ggplot(data = tbst_pos_age_sex, 
-         aes(x=age_group, y=pct, fill = sex)) +
+         aes(x=labels, y=pct, fill = sex, 
+             # label=round(pct*100, digits = 1))) +
+             label=percent(pct, accuracy = 0.1))) +
   geom_bar(stat="identity",position = "dodge") +
+  geom_text(vjust=-.5,
+            position = position_dodge(width=1)) +
   theme_hc() +
   theme(panel.background = element_blank(), 
         panel.border = element_blank(),
         legend.position="bottom",
         legend.background = element_blank(),
         plot.margin = unit(c(0.1,0.1,0.1,0.1), "cm"),
-        text = element_text(size = 14))  + # turn off minor 
+        text = element_text(size = 14),
+        plot.caption = element_text(hjust = 0))  +
   labs(
     x="Age group (years)",
-    fill = "Sex") +  # title and caption
+    fill = "Sex",
+    caption=paste0(
+      "TBST: tuberculosis antigen-based skin test")) +  # title and caption
   scale_fill_manual(values=c("#70ad47","#7cafdd")) +
   coord_cartesian(ylim = c(0, 0.5)) +
   scale_y_continuous(name="TBST positivity (≥ 10 mm)",
