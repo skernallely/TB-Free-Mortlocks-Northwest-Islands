@@ -26,6 +26,7 @@ library(janitor) #allows tabyl & cleaning names
 library(ggplot2) #make graphs
 library(fmsb) #risk diff and risk ratios calcs
 library(patchwork) #add arrangement for forest plot
+library(cobalt) #assessing balances and making nice love plots
 
 #----FORMULAS----
 `%notin%` <- Negate(`%in%`)
@@ -131,16 +132,44 @@ ggplot(match_with_ps_scores,
 #match using MatchIt!
 library(MatchIt)
 
+# nearest neighbor matching
+match_nn <- matchit(test_type_bin ~ sex + age_group, 
+                       data=matched_cohort,
+                       method = "nearest")
+
+# optimal full matching
+match_full <- matchit(test_type_bin ~ sex + age_group, 
+                    data=matched_cohort,
+                    method = "full")
+
+# generalized full matching
+match_gen <- matchit(test_type_bin ~ sex + age_group, 
+                      data=matched_cohort,
+                      method = "quick")
+
 # exact full matching
 match_exact <- matchit(test_type_bin ~ sex + age_group, 
                     data=matched_cohort,
                     method = "exact")
 
-summary(match_exact)
-
-match_sum <- summary(match_exact)
-plot(match_sum, var.order = "unmatched", xlim=c(0,1))
+# combined balance table for all matching methods (APPENDIX TABLE 1)
+bal.tab(test_type_bin ~ sex + age_group, 
+        data=matched_cohort, 
+        un = TRUE, weights = list(exact = match_exact, optimal_full = match_full, 
+                                  generalized_full = match_gen, nearest_neighbor = match_nn))
 #matched data looks good
+
+#we're going with exact method since it has great balance and uses the most participants for sample size
+
+#love plot for exact matching results (APPENDIX FIGURE 1)
+match_exact_sum <- summary(match_exact)
+love_exact <- plot(match_exact_sum, var.order = "data", xlim=c(0,0.2))
+
+#Save love plot 
+#this is wonky, not sure how to make it pretty
+png(filename="Figures/Appendix - Love Plot for Exact Matching.png")
+plot(match_exact_sum, var.order = "data", xlim=c(0,0.2))
+dev.off()
 
 #select matched dataset to calculate positivity and ratios
 matched_data <- match.data(match_exact)
