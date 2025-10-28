@@ -563,6 +563,19 @@ layout <- c(
   area(t = 13, l = 12, b = 30, r = 13),
   area(t = 1, l = 1, b = 13, r = 12.5))
 
+# forest plot only layout design (left, mid, right)
+layout_forest <- c(
+  area(t = 13, l = 0, b = 30, r = 4),
+  area(t = 13, l = 4, b = 30, r = 11),
+  area(t = 13, l = 12, b = 30, r = 13))
+  
+# final forest plot 
+p_left + p_mid + p_right +
+  plot_layout(design = layout_forest)
+
+## save forest plot alone figure
+ggsave("Figures/forest_plot.png", width=10, height=8)
+
 # final plot arrangement
 p_left + p_mid + p_right + gen_grob(sectiona_table,
                                     fit="width") +
