@@ -19,7 +19,9 @@ library(gtsummary) #allows summary tabyl and p-value
 library(ggplot2) #make graphs
 library(ggthemes) #makes prettier graphs
 library(patchwork) #add arrangement
-library(scales)
+library(scales) # get nice formatting for percents and commas
+library(flextable) #make a nice table 1 or 2
+
 
 #formulas
 `%notin%` <- Negate(`%in%`)
@@ -40,7 +42,12 @@ tbst_only<-mortlocks_flatfile %>%
          xray_result_preliminary,is_xpert_testing, lab_and_diagnostic_id
   ) %>%
   mutate(age_group = factor(age_group, 
-                            levels=c("2-4","5-9","10-19","20-39","40-59","60+")),)
+                            levels=c("2-4","5-9","10-19","20-39","40-59","60+")),
+         ltbi = case_when(
+           tst_result_10 == ">= 10 mm TST" & active_tb_tx != 1 &
+           prior_tb != 1 ~ 1,
+           .default = 0)
+  )
 
 
 ##----Algorithm numbers----
@@ -115,6 +122,7 @@ tbst_only %>%
 #demographic summary table of people screened with a TBST
 sumtable(tbst_only)
 
+
 #TABLE 2
 #determine number of active TB cases by TBST result
 tbst_only %>%
@@ -127,6 +135,147 @@ tbst_only %>%
   pivot_longer(-tst_result_10) %>% 
   pivot_wider(names_from=tst_result_10, values_from=value) 
   
+#NEW TABLE 2 COMBINING OUTCOMES
+
+## Make functions to quickly summarize each type of variable for table 1
+#categorical and binary variables
+table_1_cat <- function(variable,level,population){
+  sprintf("%s (%2.1f)",
+          format(sum(variable == level,na.rm = T), big.mark=","),
+          sum(variable == level,na.rm = T)/(population-sum(is.na(variable)))*100)
+}
+## Make label function for table 1 variable names
+labeller <- function(var,string){
+  stringr::str_detect(var,string)
+}
+
+sex_label <- paste0("Sex",common::supsc(2))
+ag_label <- paste0("Age group (years)",common::supsc(2))
+tb_label <- paste0("Outcomes",common::supsc("34"))
+
+row_totals <- tbst_only |>
+  summarise(n_total = length(sex),
+            n_sex_f = sum(sex=="F"),
+            n_sex_m = sum(sex=="M"),
+            
+            n_sex_24 = sum(age_group=="2-4"),
+            n_24 = sum(age_group=="2-4"),
+            n_59 = sum(age_group== "5-9"),
+            n_1019 = sum(age_group=="10-19"),
+            n_2039 = sum(age_group=="20-39"),
+            n_4059 = sum(age_group=="40-59"),
+            n_60plus = sum(age_group=="60+"))
+
+## Create table 1
+table_1 <- tbst_only |>
+  dplyr::mutate(group = "total", #assign data for all births descriptive stats
+                group = factor(group,
+                               levels = c("total", "pos", "neg"),
+                               labels = c("total", "pos", "neg")) )|>
+  rbind(tbst_only |> # add data for positive TBST
+          dplyr::mutate(group = "pos") |>
+          dplyr::filter(tst_result_10 == ">= 10 mm TST")) |>
+  rbind(tbst_only |> # add data for negative TBST
+          dplyr::mutate(group = "neg") |>
+          dplyr::filter(tst_result_10 == "<10 mm TST")) |> 
+  dplyr::group_by(group) |>
+  dplyr::summarise(
+    #overall counts
+    overall_n = length(sex),
+    total_n = sprintf("%s (%2.1f)",
+                          format(overall_n, big.mark=","),
+                          overall_n/(row_totals$n_total)*100),
+
+    #sex categorical,
+    sex_label = sex_label,
+    sex_f = table_1_cat(sex,"F",row_totals$n_sex_f),
+    sex_M = table_1_cat(sex,"M",row_totals$n_sex_m),
+
+    #age_group categories
+    ag_label = ag_label,
+    ag_24 = table_1_cat(age_group,"2-4",row_totals$n_sex_24),
+    ag_59 = table_1_cat(age_group, "5-9",row_totals$n_59),
+    ag_1019 = table_1_cat(age_group,"10-19",row_totals$n_1019),
+    ag_2039 = table_1_cat(age_group,"20-39",row_totals$n_2039),
+    ag_4059 = table_1_cat(age_group,"40-59",row_totals$n_4059),
+    ag_60plus = table_1_cat(age_group,"60+",row_totals$n_60plus),
+
+    tb_label = tb_label,
+    #tb disease
+    tb_Y = table_1_cat(active_tb_tx,1,overall_n),
+    #tbi
+    tbi_Y = table_1_cat(ltbi,1,overall_n),
+
+    #make overall count character after it's been useful as numeric in above calculations
+    overall_n = sprintf("%d",overall_n)
+  ) |>
+  tidyr::pivot_longer( # pivot longer for rearranging
+    cols=c(everything(),-group),
+    names_to ="label",
+    values_to = "value") |>
+  tidyr::pivot_wider( # pivot wider to descriptive statistics by groups with pretty labels
+    names_from ="group",
+    values_from = "value"
+  ) |>
+  dplyr::filter(label!="overall_n") |>
+  dplyr::mutate(
+    Variable = dplyr::case_when( # add cleaned up variable labels for final table 1
+      labeller(label,"total_n") ~ "Total",
+      
+      labeller(label,"sex_label") ~ sex_label,
+      labeller(label,"sex_f") ~ "Female",
+      labeller(label,"sex_M") ~ "Male",
+
+      labeller(label,"ag_label") ~ ag_label,
+      labeller(label,"ag_24") ~ "2-4",
+      labeller(label,"ag_59") ~ "5-9",
+      labeller(label,"ag_1019") ~ "10-19",
+      labeller(label,"ag_2039") ~ "20-39",
+      labeller(label,"ag_4059") ~ "40-59",
+      labeller(label,"ag_60plus") ~ "60+",
+
+      labeller(label,"tb_label") ~ tb_label,
+      labeller(label,"tb_Y") ~ "Diagnosed with TB disease",
+      labeller(label,"tbi_Y") ~ "Diagnosed with TB infection",
+      .default = label)) |>
+  dplyr::select(Variable,pos,neg,total) #get arrange table1
+
+#make table 1
+flex_table_1 <- table_1 |>
+  flextable() |>
+  theme_booktabs(bold_header = F) |> #add basic table format
+  merge_h(i = 1:14) |> #merge headers for groups
+  set_header_labels(Variable = NA, #clean up header
+                    total = paste("Total screened with TBST","n (%)",sep = "\n"),
+                    pos = paste(paste0("TBST positive",common::supsc(1)),"n (%)",sep = "\n"),
+                    neg = paste("TBST negative","n (%)",sep = "\n")) |>
+  align(align = "center", part="header") |> #align header
+  align(align = "center", j=2:4) |> #align data cells  
+  align(align = "right", i = c(3:4,6:11,13:14), j=1) |> #align row sublabels
+  add_footer_lines( #add footer
+    as_paragraph(
+      as_sup("1")," Positive TBST result could indicate new or prior TB infection or TB disease; TB disease diagnosis relied on further evaluations following TBST.",
+      "\n",
+      as_sup("2")," Percentages are presented as row percentages.",
+      "\n",
+      as_sup("3")," Percentages are presented as column percentages.",      
+      "\n",
+      as_sup("4")," 12 people with a positive TBST result were not diagnosed with TB infection or TB disease because they had received treatment for TB infection or TB disease in the past 2 years; these people were not retreated.")
+  ) |>
+  set_table_properties(layout = "autofit") |> #autofit widths
+  line_spacing(space = .5, i = c(3:4,6:11,13:14)) |> #get compact spacing for sublabels
+  fontsize(size=10, part="all") |> #set fontsizes to match table in Project2 word doc
+  fontsize(size=9, part="footer") |>
+  add_header_lines(values=as_paragraph(as_i("Table 1.")," Mycobacterium tuberculosis antigen-based skin tests (TBSTs) results and TB infection and disease diagnoses among participants screened, Mortlock and Northwest Islands Community-Wide TB Active Case Finding, May-June 2024")) |># add title
+  border(i=1,part="header",border.top  = officer::fp_border(color = "white")) |> #remove top bar
+  border(i=2,j=1,part="header",border.bottom  = officer::fp_border(color = "white")) #remove bottom bar in header
+
+#view beautiful table
+flex_table_1
+
+# Save table1 as word doc
+flex_table_1 |> save_as_docx(path="Figures/table2.docx")
+
 
 #----{TST POSITIVITY COUNTS and RATES}-----
 #number of people with TSTs placed
