@@ -17,7 +17,7 @@
 # --------------------------
 
 #----WORKING DIRECTORY----
-setwd("~/PIHOA/TBFC/R Analysis/Mortlocks_NW")
+# setwd("~/PIHOA/TBFC/R Analysis/Mortlocks_NW")
 
 #---PACKAGES----
 library(tidyverse) #pipes, stringr, lubridate
@@ -27,6 +27,7 @@ library(ggplot2) #make graphs
 library(fmsb) #risk diff and risk ratios calcs
 library(patchwork) #add arrangement for forest plot
 library(cobalt) #assessing balances and making nice love plots
+library(tableone) # make tableone for brief lok at statistics
 
 #----FORMULAS----
 `%notin%` <- Negate(`%in%`)
@@ -54,24 +55,26 @@ lagoon_region <- tribble(
 tbst_mortlocks_nw <- read_excel("Data/mortlocks_flatfile.xlsx",
            guess_max = 20000, col_names = TRUE) %>%
   mutate(municipality = str_to_upper(municipality),
-         test_type = "TBST"
-  ) %>%
+         test_type = "TBST") %>%
   merge(lagoon_region, by="municipality") %>%
   select("registration_no", "age", "sex", "municipality", "region",
-         "tst_result", "tst_result_10","test_type")
+         "tst_result", "tst_result_10","test_type",
+         "known_tb_exposure","prior_tb",
+         "al_one_symptom", "dm_a1c_result")
 
 ## TB-FREE CHUUK IN WENO, TONOAS AND FEFAN DATA SET
 ## Contains test results for patients who received TST from 9-year TB rate matched islands
 
-tst_weno_tonoas_fefen <- read_excel("~/PIHOA/TBFC/R Analysis/Weno_Chuuk_Lagoon/Data/tbfc_analysis_dataset.xlsx",
+tst_weno_tonoas_fefen <- read_excel("Data/tbfc_analysis_dataset.xlsx",
                             guess_max = 20000, col_names = TRUE) %>%
-  mutate(test_type = "TST"
-  ) %>%
+  mutate(test_type = "TST") %>%
   filter(municipality %in% c("TONOAS","WENO","FEFEN")) %>%
   rename(lagoon_region = region) %>%
-  merge(lagoon_region, by="municipality")  %>%
+  merge(lagoon_region, by="municipality") %>%
   select("registration_no", "age", "sex", "municipality", "region",
-         "tst_result", "tst_result_10", "test_type") %>%
+         "tst_result", "tst_result_10", "test_type",
+         "known_tb_exposure","prior_tb",
+         "al_one_symptom", "dm_a1c_result") %>%
   filter(age > 4 & is.not.na(tst_result_10))
 
 ###Combine case-matched cohorts into one dataset
@@ -97,7 +100,6 @@ matched_cohort <- tst_weno_tonoas_fefen %>%
 #weighting is required
 
 #take a look at age and sex distribution for tst and tbst
-library(tableone)
 table2<-CreateTableOne(vars = c('sex','tst_result_10_bin','age','age_group'),
                data=matched_cohort,
                factorVars=c('age_group','sex','tst_result_10_bin'),
@@ -107,6 +109,123 @@ table2
 # likely due to reduction in clinic return bias seen in lagoon
 # both male sex and older age are associated with inc risk of tst pos
 # need to match on these variables
+
+## Make functions to quickly summarize each type of variable for supplemental table
+#categorical and binary variables
+table_1_cat <- function(variable,level,population){
+  sprintf("%s (%2.1f)",
+          format(sum(variable == level,na.rm = T), big.mark=","),
+          sum(variable == level,na.rm = T)/(population-sum(is.na(variable)))*100)
+}
+#continuous variables
+table_1_cont <- function(variable){
+  sprintf("%2.1f (%2.2f)",mean(variable),sd(variable))
+}
+## Make label function for table 1 variable names
+labeller <- function(var,string){
+  stringr::str_detect(var,string)
+}
+
+sex_label <- paste0("Sex")
+ag_label <- paste0("Age (years)")
+# exp_label <- paste0("Reported exposure to a known case of TB in the last 5 years")
+# prev_tx_label <- paste0("Previous treatment for TB disease or TBI")
+# symp_label <- paste0("Reported current TB symptoms",common::supsc(3))
+# dm_label <- paste0("Hemoglobin A1c ≥6.5%")
+
+## Create table 1
+table_supp <- matched_cohort |>
+  dplyr::mutate(test_type = factor(test_type,
+                               levels = c("TBST", "TST", "Total"),
+                               labels = c("TBST", "TST", "Total")) )|>
+  dplyr::group_by(test_type) |>
+  dplyr::summarise(
+    #overall counts
+    overall_n = length(registration_no),
+    
+    #sex categorical,
+    sex_label = sex_label,
+    sex_f = table_1_cat(sex,"F",overall_n),
+    sex_M = table_1_cat(sex,"M",overall_n),
+    
+    #age_group summary
+    ag = table_1_cont(age),
+    
+    # risk_label = "Risk factors",
+    # #known exposed to TB case
+    # exp_Y = table_1_cat(known_tb_exposure,1,overall_n),
+    # #prev tx for tb or ltbi
+    # prev_tx_Y = table_1_cat(prior_tb,1,overall_n),
+    # #at least one symptom
+    # symp_Y = table_1_cat(al_one_symptom,1,overall_n),
+    # #a1c
+    # dm_Y = table_1_cat(dm_a1c_result,1,overall_n),
+    # 
+    #make overall count character after it's been useful as numeric in above calculations
+    overall_n = sprintf("%d",overall_n)
+  ) |>
+  tidyr::pivot_longer( # pivot longer for rearranging
+    cols=c(everything(),-test_type),
+    names_to ="label",
+    values_to = "value") |>
+  tidyr::pivot_wider( # pivot wider to descriptive statistics by groups with pretty labels
+    names_from ="test_type",
+    values_from = "value"
+  ) |>
+  # dplyr::filter(label!="overall_n") |>
+  dplyr::mutate(
+    Variable = dplyr::case_when( # add cleaned up variable labels for final table 1
+      labeller(label,"overall_n") ~ "Total screened",
+      
+      labeller(label,"sex_label") ~ sex_label,
+      labeller(label,"sex_f") ~ "Female",
+      labeller(label,"sex_M") ~ "Male",
+      
+      labeller(label,"ag") ~ ag_label,
+      # 
+      # labeller(label,"risk_label") ~ "Risk factors",
+      # labeller(label,"exp_Y") ~ exp_label,
+      # labeller(label,"prev_tx_Y") ~ prev_tx_label,
+      # labeller(label,"symp_Y") ~ symp_label,
+      # labeller(label,"dm_Y") ~ dm_label,
+      .default = label)) |>
+  dplyr::select(Variable,TBST,TST) #get arrange table1
+
+#make supp table
+flex_table_supp <- read_excel("Figures/comp_of_tbst_tst_population_headers.xlsx",
+                   col_names = TRUE, col_types = "text")|>
+  rbind(table_supp) |>
+  flextable() |>
+  theme_booktabs(bold_header = F) |> #add basic table format
+  merge_h(i = 10) |> #merge headers for groups
+  set_header_labels(Variable = NA, #clean up header
+                    Total = paste("Total","n (%)",sep = "\n"),
+                    TBST = paste("Mortlocks/Northwest","n (%)",sep = "\n"),
+                    TST = paste("Chuuk Lagoon","n (%)",sep = "\n")) |>
+  align(align = "center", part="header") |> #align header
+  align(align = "center", j=2:3) |> #align data cells  
+  align(align = "right", i = c(11:12), j=1) |> #align row sublabels
+  add_footer_lines( #add footer
+    as_paragraph(
+      "Abbreviations: TBSTs - ",
+      as_i("Mycobacterium tuberculosis"),
+      " antigen-based skin tests; TST - Tuberculin skin test",
+      "\n",
+      "* Population counts from the Federated States of Micronesia 2010 Census")) |>
+  set_table_properties(layout = "autofit") |> #autofit widths
+  line_spacing(space = .5, i = c(11:12)) |> #get compact spacing for sublabels
+  fontsize(size=12, part="all") |> #set fontsizes to match table in Project2 word doc
+  fontsize(size=10, part="footer") |>
+  add_header_lines(values=as_paragraph(as_i("Table 2.")," TBST and TST population comparison")) |># add title
+  border(i=1,part="header",border.top  = officer::fp_border(color = "white")) |> #remove top bar
+  border(i=2,j=1,part="header",border.bottom  = officer::fp_border(color = "white")) #remove bottom bar in header
+
+#view beautiful table
+flex_table_supp
+
+# Save table1 as word doc
+flex_table_supp |> save_as_docx(path="Figures/supp_table_comparison.docx")
+
 
 # take a look at propensity score now
 #make model of the likelihood of being positive by age and sex

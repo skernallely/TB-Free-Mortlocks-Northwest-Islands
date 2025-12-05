@@ -135,7 +135,7 @@ tbst_only %>%
   pivot_longer(-tst_result_10) %>% 
   pivot_wider(names_from=tst_result_10, values_from=value) 
   
-#NEW TABLE 2 COMBINING OUTCOMES
+#NEW TABLE 2 WITH OUTCOMES
 
 ## Make functions to quickly summarize each type of variable for table 1
 #categorical and binary variables
@@ -149,25 +149,17 @@ labeller <- function(var,string){
   stringr::str_detect(var,string)
 }
 
-sex_label <- paste0("Sex",common::supsc(2))
-ag_label <- paste0("Age group (years)",common::supsc(2))
-tb_label <- paste0("Outcomes",common::supsc("34"))
+total_label <- paste0("Total",common::supsc(2))
+tb_label <- paste0("Outcomes",common::supsc(3))
+tbdx_label <- paste0("Diagnosed with TB disease",common::supsc(4))
+tbi_label <- paste0("Diagnosed with TB infection",common::supsc(4))
+
 
 row_totals <- tbst_only |>
-  summarise(n_total = length(sex),
-            n_sex_f = sum(sex=="F"),
-            n_sex_m = sum(sex=="M"),
-            
-            n_sex_24 = sum(age_group=="2-4"),
-            n_24 = sum(age_group=="2-4"),
-            n_59 = sum(age_group== "5-9"),
-            n_1019 = sum(age_group=="10-19"),
-            n_2039 = sum(age_group=="20-39"),
-            n_4059 = sum(age_group=="40-59"),
-            n_60plus = sum(age_group=="60+"))
+  summarise(n_total = length(sex))
 
 ## Create table 1
-table_1 <- tbst_only |>
+table_2 <- tbst_only |>
   dplyr::mutate(group = "total", #assign data for all births descriptive stats
                 group = factor(group,
                                levels = c("total", "pos", "neg"),
@@ -186,20 +178,7 @@ table_1 <- tbst_only |>
                           format(overall_n, big.mark=","),
                           overall_n/(row_totals$n_total)*100),
 
-    #sex categorical,
-    sex_label = sex_label,
-    sex_f = table_1_cat(sex,"F",row_totals$n_sex_f),
-    sex_M = table_1_cat(sex,"M",row_totals$n_sex_m),
-
-    #age_group categories
-    ag_label = ag_label,
-    ag_24 = table_1_cat(age_group,"2-4",row_totals$n_sex_24),
-    ag_59 = table_1_cat(age_group, "5-9",row_totals$n_59),
-    ag_1019 = table_1_cat(age_group,"10-19",row_totals$n_1019),
-    ag_2039 = table_1_cat(age_group,"20-39",row_totals$n_2039),
-    ag_4059 = table_1_cat(age_group,"40-59",row_totals$n_4059),
-    ag_60plus = table_1_cat(age_group,"60+",row_totals$n_60plus),
-
+    #TB data
     tb_label = tb_label,
     #tb disease
     tb_Y = table_1_cat(active_tb_tx,1,overall_n),
@@ -220,61 +199,53 @@ table_1 <- tbst_only |>
   dplyr::filter(label!="overall_n") |>
   dplyr::mutate(
     Variable = dplyr::case_when( # add cleaned up variable labels for final table 1
-      labeller(label,"total_n") ~ "Total",
-      
-      labeller(label,"sex_label") ~ sex_label,
-      labeller(label,"sex_f") ~ "Female",
-      labeller(label,"sex_M") ~ "Male",
-
-      labeller(label,"ag_label") ~ ag_label,
-      labeller(label,"ag_24") ~ "2-4",
-      labeller(label,"ag_59") ~ "5-9",
-      labeller(label,"ag_1019") ~ "10-19",
-      labeller(label,"ag_2039") ~ "20-39",
-      labeller(label,"ag_4059") ~ "40-59",
-      labeller(label,"ag_60plus") ~ "60+",
+      labeller(label,"total_n") ~ total_label,
 
       labeller(label,"tb_label") ~ tb_label,
-      labeller(label,"tb_Y") ~ "Diagnosed with TB disease",
-      labeller(label,"tbi_Y") ~ "Diagnosed with TB infection",
+      labeller(label,"tb_Y") ~ tbdx_label,
+      labeller(label,"tbi_Y") ~ tbi_label,
       .default = label)) |>
   dplyr::select(Variable,pos,neg,total) #get arrange table1
 
-#make table 1
-flex_table_1 <- table_1 |>
+#make table 2
+flex_table_2 <- table_2 |>
   flextable() |>
   theme_booktabs(bold_header = F) |> #add basic table format
-  merge_h(i = 1:14) |> #merge headers for groups
+  merge_h(i = 1:4) |> #merge headers for groups
   set_header_labels(Variable = NA, #clean up header
                     total = paste("Total screened with TBST","n (%)",sep = "\n"),
                     pos = paste(paste0("TBST positive",common::supsc(1)),"n (%)",sep = "\n"),
                     neg = paste("TBST negative","n (%)",sep = "\n")) |>
   align(align = "center", part="header") |> #align header
   align(align = "center", j=2:4) |> #align data cells  
-  align(align = "right", i = c(3:4,6:11,13:14), j=1) |> #align row sublabels
+  align(align = "right", i = c(3:4), j=1) |> #align row sublabels
   add_footer_lines( #add footer
     as_paragraph(
+      "Abbreviations: TBST - ",
+      as_i("Mycobacterium tuberculosis"),
+      " antigen-based skin test; TST - Tuberculin skin test; TB - Tuberculosis",
+      "\n",
       as_sup("1")," Positive TBST result could indicate new or prior TB infection or TB disease; TB disease diagnosis relied on further evaluations following TBST.",
       "\n",
       as_sup("2")," Percentages are presented as row percentages.",
       "\n",
-      as_sup("3")," Percentages are presented as column percentages.",      
+      as_sup("3")," 12 people with a positive TBST result were not diagnosed with TB infection or TB disease because they had received treatment for TB infection or TB disease in the past 2 years; these people were not retreated.",
       "\n",
-      as_sup("4")," 12 people with a positive TBST result were not diagnosed with TB infection or TB disease because they had received treatment for TB infection or TB disease in the past 2 years; these people were not retreated.")
-  ) |>
+      as_sup("4")," Percentages are presented as column percentages."      
+    )) |>
   set_table_properties(layout = "autofit") |> #autofit widths
-  line_spacing(space = .5, i = c(3:4,6:11,13:14)) |> #get compact spacing for sublabels
+  line_spacing(space = .5, i = c(3:4)) |> #get compact spacing for sublabels
   fontsize(size=10, part="all") |> #set fontsizes to match table in Project2 word doc
   fontsize(size=9, part="footer") |>
-  add_header_lines(values=as_paragraph(as_i("Table 1.")," Mycobacterium tuberculosis antigen-based skin tests (TBSTs) results and TB infection and disease diagnoses among participants screened, Mortlock and Northwest Islands Community-Wide TB Active Case Finding, May-June 2024")) |># add title
+  add_header_lines(values=as_paragraph(as_i("Table 2.")," Mycobacterium tuberculosis antigen-based skin tests (TBSTs) results and TB infection and disease diagnoses among participants screened, Mortlock and Northwest Islands Community-Wide TB Active Case Finding, May-June 2024")) |># add title
   border(i=1,part="header",border.top  = officer::fp_border(color = "white")) |> #remove top bar
   border(i=2,j=1,part="header",border.bottom  = officer::fp_border(color = "white")) #remove bottom bar in header
 
 #view beautiful table
-flex_table_1
+flex_table_2
 
 # Save table1 as word doc
-flex_table_1 |> save_as_docx(path="Figures/table2.docx")
+flex_table_2 |> save_as_docx(path="Figures/table2.docx")
 
 
 #----{TST POSITIVITY COUNTS and RATES}-----
