@@ -28,6 +28,7 @@ library(fmsb) #risk diff and risk ratios calcs
 library(patchwork) #add arrangement for forest plot
 library(cobalt) #assessing balances and making nice love plots
 library(tableone) # make tableone for brief lok at statistics
+library(flextable)
 
 #----FORMULAS----
 `%notin%` <- Negate(`%in%`)
@@ -647,7 +648,7 @@ p_mid <-
 # wrangle results into pre-plotting table form
 res_plot <- risk_ratio_estimates %>%
   mutate(across(c(estimate, log.conf.low, log.conf.high), ~str_pad(round(.x, 2), width=4, pad="0", side="right")),
-         estimate_lab = paste0(estimate, " (", log.conf.low, "-", log.conf.high,")"),
+         estimate_lab = paste0(estimate, " (", log.conf.low, "–", log.conf.high,")"),
          color = c("gray","white","gray","white","gray","white","gray","white","gray")) |>
   mutate(p.value = case_when(p.value < .001 ~ "<0.001", TRUE ~ str_pad(as.character(round(p.value, 3)),width=4,pad="0",side="right"))) |>
   bind_rows(data.frame(model = "", estimate_lab = "PR (95% CI)", log.conf.low = "", log.conf.high="",p.value="p-value")) |>
@@ -684,16 +685,17 @@ layout <- c(
 
 # forest plot only layout design (left, mid, right)
 layout_forest <- c(
-  area(t = 13, l = 0, b = 30, r = 4),
-  area(t = 13, l = 4, b = 30, r = 11),
-  area(t = 13, l = 12, b = 30, r = 13))
+  area(t = 0, l = 0, b = 30, r = 4),
+  area(t = 0, l = 4, b = 30, r = 11),
+  area(t = 0, l = 12, b = 30, r = 13))
   
 # final forest plot 
 p_left + p_mid + p_right +
   plot_layout(design = layout_forest)
 
 ## save forest plot alone figure
-ggsave("Figures/forest_plot.png", width=10, height=8)
+ggsave("Figures/forest_plot_only.png", width=10, height=4)
+ggsave("Figures/forest_plot_only.pdf", width=10, height=4)
 
 # final plot arrangement
 p_left + p_mid + p_right + gen_grob(sectiona_table,
