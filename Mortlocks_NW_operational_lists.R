@@ -5,7 +5,7 @@
 
 #------------------------------------------------------------------------------
 #WORKING DIRECTORY
-setwd("~/PIHOA/TBFC/R Analysis/Mortlocks_NW")
+# setwd("~/PIHOA/TBFC/R Analysis/Mortlocks_NW")
 
 #PACKAGES
 library(tidyverse) #pipes, stringr, lubridate, scales
@@ -71,7 +71,23 @@ ltbi_mortlocks <- mortlocks_flatfile %>%
          notes)
 
 #EXPORT LTBI LIST TO EXCEL
-write.xlsx(ltbi_mortlocks, "Mortlocks_NW/ltbi_mortlocks.xlsx")
+write.xlsx(ltbi_mortlocks, "Data/ltbi_mortlocks.xlsx")
+
+### HD Prevention for MNW
+###Make HD list for National
+hd_prev_mortlocks <- mortlocks_flatfile %>%
+  filter(is.not.na(hd_prev_given)) %>%
+  mutate(hd_prevention_given = case_when(hd_prev_given == 1 ~ "Y"),
+         date_of_screening = as.Date(date_of_visit1),
+         date_of_birth = as.Date(date_of_birth),
+         age_group = paste0("Age ",age_group)) %>%
+  filter(hd_prev_given == 1) %>%
+  select(registration_no,last_name,first_name,date_of_birth,age,age_group,sex,
+         municipality,village,date_of_screening,hd_prevention_given,hd_prevention_text)
+
+#EXPORT HD PREV LIST TO EXCEL
+write.xlsx(hd_prev_mortlocks, "Data/hd_prev_mortlocks.xlsx")
+
 
 #clean the workspace
 rm(list = ls())
